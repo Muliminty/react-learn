@@ -1,31 +1,33 @@
 /**
  * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the MIT license found in the
- * LICENSE file in the root directory of this source tree.
+ * 此源代码受 MIT 许可证的约束，许可证可在源代码树的根目录下的 LICENSE 文件中找到。
  */
 
-import getComponentNameFromType from 'shared/getComponentNameFromType';
-import ReactSharedInternals from 'shared/ReactSharedInternals';
-import hasOwnProperty from 'shared/hasOwnProperty';
-import assign from 'shared/assign';
+// 从共享模块中导入工具函数和常量
+import getComponentNameFromType from 'shared/getComponentNameFromType'; // 获取组件名称的工具函数
+import ReactSharedInternals from 'shared/ReactSharedInternals'; // React 内部共享的工具和变量
+import hasOwnProperty from 'shared/hasOwnProperty'; // 检查对象是否拥有某个属性的工具函数
+import assign from 'shared/assign'; // 对象属性合并的工具函数
 import {
   getIteratorFn,
-  REACT_ELEMENT_TYPE,
-  REACT_FRAGMENT_TYPE,
-  REACT_LAZY_TYPE,
-} from 'shared/ReactSymbols';
-import { checkKeyStringCoercion } from 'shared/CheckStringCoercion';
-import isValidElementType from 'shared/isValidElementType';
-import isArray from 'shared/isArray';
-import { describeUnknownElementTypeFrameInDEV } from 'shared/ReactComponentStackFrame';
+  REACT_ELEMENT_TYPE, // React 元素类型的 Symbol
+  REACT_FRAGMENT_TYPE, // Fragment 类型的 Symbol
+  REACT_LAZY_TYPE, // Lazy 组件类型的 Symbol
+} from 'shared/ReactSymbols'; // React 相关的 Symbol 常量
+import { checkKeyStringCoercion } from 'shared/CheckStringCoercion'; // 检查 key 是否为字符串的工具函数
+import isValidElementType from 'shared/isValidElementType'; // 检查是否为有效的元素类型
+import isArray from 'shared/isArray'; // 检查是否为数组的工具函数
+import { describeUnknownElementTypeFrameInDEV } from 'shared/ReactComponentStackFrame'; // 在开发模式下描述未知元素类型的堆栈信息
 import {
-  disableDefaultPropsExceptForClasses,
-  enableOwnerStacks,
-} from 'shared/ReactFeatureFlags';
+  disableDefaultPropsExceptForClasses, // 禁用默认 props（除了类组件）的特性标志
+  enableOwnerStacks, // 启用组件堆栈跟踪的特性标志
+} from 'shared/ReactFeatureFlags'; // React 特性标志
 
+// React 客户端引用的 Symbol
 const REACT_CLIENT_REFERENCE = Symbol.for('react.client.reference');
 
+// 创建一个任务（用于开发模式下的堆栈跟踪）
 const createTask =
   // eslint-disable-next-line react-internal/no-production-logging
   __DEV__ && enableOwnerStacks && console.createTask
@@ -33,55 +35,105 @@ const createTask =
     console.createTask
     : () => null;
 
+/**
+ * 获取任务名称（用于开发模式下的堆栈跟踪）
+ * @param {*} type 组件类型
+ * @returns {string} 任务名称
+ */
 function getTaskName(type) {
   if (type === REACT_FRAGMENT_TYPE) {
-    return '<>';
+    return '<>'; // Fragment 类型的任务名称
   }
   if (
     typeof type === 'object' &&
     type !== null &&
     type.$$typeof === REACT_LAZY_TYPE
   ) {
-    // We don't want to eagerly initialize the initializer in DEV mode so we can't
-    // call it to extract the type so we don't know the type of this component.
+    // 如果是 Lazy 组件，不立即初始化，因此无法获取具体类型
     return '<...>';
   }
   try {
+    // 尝试获取组件名称
     const name = getComponentNameFromType(type);
-    return name ? '<' + name + '>' : '<...>';
+    return name ? '<' + name + '>' : '<...>'; // 返回带组件名称的任务名称
   } catch (x) {
-    return '<...>';
+    return '<...>'; // 如果出错，返回默认名称
   }
 }
 
+/**
+ * 获取当前组件的所有者（Owner）。
+ * 所有者通常是当前组件的父组件，用于在开发模式下调试和错误提示。
+ * 
+ * @returns {ReactComponent|null} 当前组件的所有者，如果不存在或不在开发模式下，返回 null。
+ */
 function getOwner() {
-  if (__DEV__) {
+  if (__DEV__) { // 仅在开发模式下执行
+    // ReactSharedInternals.A 是 React 内部的调度器（Dispatcher），
+    // 它包含了 React 在运行时的内部方法和状态。
     const dispatcher = ReactSharedInternals.A;
+
+    // 如果调度器不存在，返回 null。
+    // 这种情况可能发生在 React 尚未初始化或调度器被意外清空时。
     if (dispatcher === null) {
       return null;
     }
+
+    // 调用调度器的 getOwner 方法，获取当前组件的所有者。
+    // 所有者信息通常用于调试，例如在错误提示中显示组件的堆栈信息。
     return dispatcher.getOwner();
   }
+
+  // 在生产模式下，直接返回 null。
+  // 生产模式下不会跟踪组件所有者，以减少性能开销。
   return null;
 }
 
+// 以下变量用于控制开发模式下的警告显示，避免重复提示相同的警告。
+
+// 是否已经显示过关于特殊 prop（如 `key`）的警告。
+// 这是一个全局标志，用于确保只显示一次相关警告。
 let specialPropKeyWarningShown;
+
+// 是否已经显示过关于 `ref` 的警告。
+// 这是一个全局对象，用于记录哪些组件已经显示过 ref 相关的警告。
+// 键是组件的唯一标识，值是一个布尔值，表示是否已经显示过警告。
 let didWarnAboutElementRef;
+
+// 是否已经显示过关于旧版 JSX 运行时的警告。
+// 这是一个全局标志，用于确保只显示一次相关警告。
 let didWarnAboutOldJSXRuntime;
 
-if (__DEV__) {
+if (__DEV__) { // 仅在开发模式下初始化
+  // 初始化 didWarnAboutElementRef 为一个空对象。
+  // 这个对象用于记录哪些组件已经显示过 ref 相关的警告。
   didWarnAboutElementRef = {};
 }
 
+/**
+ * 检查配置对象（config）中的 `ref` 属性是否有效。
+ * 在开发模式下，会额外检查 `ref` 是否被标记为 React 的警告属性。
+ *
+ * @param {Object} config - 包含组件属性的配置对象。
+ * @returns {boolean} - 如果 `ref` 属性有效且未被标记为警告，返回 `true`；否则返回 `false`。
+ */
 function hasValidRef(config) {
-  if (__DEV__) {
+  if (__DEV__) { // 仅在开发模式下执行额外检查
+    // 检查 config 对象是否包含 `ref` 属性
     if (hasOwnProperty.call(config, 'ref')) {
+      // 获取 `ref` 属性的属性描述符
       const getter = Object.getOwnPropertyDescriptor(config, 'ref').get;
+
+      // 如果 `ref` 属性是一个 getter，并且被标记为 React 的警告属性（isReactWarning），
+      // 则返回 false，表示 `ref` 无效。
       if (getter && getter.isReactWarning) {
         return false;
       }
     }
   }
+
+  // 在生产模式下，直接检查 `ref` 是否不为 undefined。
+  // 如果 `ref` 存在且不为 undefined，则认为它是有效的。
   return config.ref !== undefined;
 }
 
