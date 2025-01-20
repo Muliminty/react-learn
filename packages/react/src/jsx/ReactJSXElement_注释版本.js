@@ -137,45 +137,84 @@ function hasValidRef(config) {
   return config.ref !== undefined;
 }
 
+/**
+ * 检查配置对象（config）中的 `key` 属性是否有效。
+ * 在开发模式下，会额外检查 `key` 是否被标记为 React 的警告属性。
+ *
+ * @param {Object} config - 包含组件属性的配置对象。
+ * @returns {boolean} - 如果 `key` 属性有效且未被标记为警告，返回 `true`；否则返回 `false`。
+ */
 function hasValidKey(config) {
-  if (__DEV__) {
+  if (__DEV__) { // 仅在开发模式下执行额外检查
+    // 检查 config 对象是否包含 `key` 属性
     if (hasOwnProperty.call(config, 'key')) {
+      // 获取 `key` 属性的属性描述符
       const getter = Object.getOwnPropertyDescriptor(config, 'key').get;
+
+      // 如果 `key` 属性是一个 getter，并且被标记为 React 的警告属性（isReactWarning），
+      // 则返回 false，表示 `key` 无效。
       if (getter && getter.isReactWarning) {
         return false;
       }
     }
   }
+
+  // 在生产模式下，直接检查 `key` 是否不为 undefined。
+  // 如果 `key` 存在且不为 undefined，则认为它是有效的。
   return config.key !== undefined;
 }
 
+/**
+ * 定义一个 `key` 属性的 getter，用于在开发模式下警告开发者不要直接访问 `key`。
+ * `key` 是 React 内部使用的特殊属性，不应该作为组件的 prop 直接访问。
+ *
+ * @param {Object} props - 组件的 props 对象。
+ * @param {string} displayName - 组件的显示名称，用于在警告信息中标识组件。
+ */
 function defineKeyPropWarningGetter(props, displayName) {
-  if (__DEV__) {
+  if (__DEV__) { // 仅在开发模式下执行
+    // 定义一个函数，用于在访问 `key` 属性时发出警告
     const warnAboutAccessingKey = function () {
+      // 如果警告尚未显示过，则显示警告
       if (!specialPropKeyWarningShown) {
-        specialPropKeyWarningShown = true;
+        specialPropKeyWarningShown = true; // 标记警告已显示
+
+
         console.error(
           '%s: `key` is not a prop. Trying to access it will result ' +
           'in `undefined` being returned. If you need to access the same ' +
           'value within the child component, you should pass it as a different ' +
           'prop. (https://react.dev/link/special-props)',
-          displayName,
+          displayName, // 组件的显示名称
         );
       }
     };
+
+    // 标记这个函数为 React 的警告函数
     warnAboutAccessingKey.isReactWarning = true;
+
+    // 使用 Object.defineProperty 定义 `key` 属性的 getter
     Object.defineProperty(props, 'key', {
-      get: warnAboutAccessingKey,
-      configurable: true,
+      get: warnAboutAccessingKey, // 当访问 `key` 时，调用 warnAboutAccessingKey 函数
+      configurable: true, // 允许后续重新定义该属性
     });
   }
 }
 
+/**
+ * 获取元素的 `ref` 属性，并在开发模式下显示弃用警告。
+ * 在 React 19 中，`element.ref` 的访问方式已被移除，`ref` 现在是一个普通的 prop。
+ *
+ * @returns {*} - 返回 `ref` 属性的值。如果 `ref` 为 `undefined`，则返回 `null`。
+ */
 function elementRefGetterWithDeprecationWarning() {
-  if (__DEV__) {
+  if (__DEV__) { // 仅在开发模式下执行
+    // 获取当前组件的名称
     const componentName = getComponentNameFromType(this.type);
+
+    // 如果当前组件的 `ref` 警告尚未显示过，则显示警告
     if (!didWarnAboutElementRef[componentName]) {
-      didWarnAboutElementRef[componentName] = true;
+      didWarnAboutElementRef[componentName] = true; // 标记警告已显示
       console.error(
         'Accessing element.ref was removed in React 19. ref is now a ' +
         'regular prop. It will be removed from the JSX Element ' +
@@ -183,31 +222,26 @@ function elementRefGetterWithDeprecationWarning() {
       );
     }
 
-    // An undefined `element.ref` is coerced to `null` for
-    // backwards compatibility.
+    // 为了向后兼容，将 `undefined` 的 `ref` 强制转换为 `null`
     const refProp = this.props.ref;
     return refProp !== undefined ? refProp : null;
   }
 }
 
 /**
- * Factory method to create a new React element. This no longer adheres to
- * the class pattern, so do not use new to call it. Also, instanceof check
- * will not work. Instead test $$typeof field against Symbol.for('react.transitional.element') to check
- * if something is a React Element.
+ * 工厂方法，用于创建一个新的 React 元素。
+ * 该方法不再遵循类模式，因此不要使用 `new` 来调用它。
+ * 此外，`instanceof` 检查也不起作用。
+ * 相反，可以通过检查 `$$typeof` 字段是否为 `Symbol.for('react.transitional.element')` 来判断某个对象是否是 React 元素。
  *
- * @param {*} type
- * @param {*} props
- * @param {*} key
- * @param {string|object} ref
- * @param {*} owner
- * @param {*} self A *temporary* helper to detect places where `this` is
- * different from the `owner` when React.createElement is called, so that we
- * can warn. We want to get rid of owner and replace string `ref`s with arrow
- * functions, and as long as `this` and owner are the same, there will be no
- * change in behavior.
- * @param {*} source An annotation object (added by a transpiler or otherwise)
- * indicating filename, line number, and/or other information.
+ * @param {*} type - 元素的类型（例如，字符串 'div' 或函数组件）。
+ * @param {*} key - 元素的 key，用于在列表中唯一标识元素。
+ * @param {*} self - 一个临时辅助变量，用于检测 `React.createElement` 调用时 `this` 和 `owner` 是否相同，以便发出警告。
+ * @param {*} source - 一个注解对象（由转译器或其他工具添加），包含文件名、行号等信息。
+ * @param {*} owner - 创建此元素的组件。
+ * @param {*} props - 元素的属性（props）。
+ * @param {*} debugStack - 开发模式下用于调试的堆栈信息。
+ * @param {*} debugTask - 开发模式下用于调试的任务信息。
  * @internal
  */
 function ReactElement(
@@ -220,67 +254,53 @@ function ReactElement(
   debugStack,
   debugTask,
 ) {
-  // Ignore whatever was passed as the ref argument and treat `props.ref` as
-  // the source of truth. The only thing we use this for is `element.ref`,
-  // which will log a deprecation warning on access. In the next release, we
-  // can remove `element.ref` as well as the `ref` argument.
+  // 忽略传入的 ref 参数，将 `props.ref` 作为 ref 的真实来源。
+  // 我们只使用 `element.ref`，它会在访问时记录弃用警告。
+  // 在下一个版本中，我们将移除 `element.ref` 以及 `ref` 参数。
   const refProp = props.ref;
 
-  // An undefined `element.ref` is coerced to `null` for
-  // backwards compatibility.
+  // 为了向后兼容，将 `undefined` 的 `ref` 强制转换为 `null`。
   const ref = refProp !== undefined ? refProp : null;
 
   let element;
-  if (__DEV__) {
-    // In dev, make `ref` a non-enumerable property with a warning. It's non-
-    // enumerable so that test matchers and serializers don't access it and
-    // trigger the warning.
+  if (__DEV__) { // 开发模式下的处理
+    // 在开发模式下，将 `ref` 定义为一个不可枚举的属性，并附加警告。
+    // 不可枚举是为了防止测试匹配器和序列化工具访问它并触发警告。
     //
-    // `ref` will be removed from the element completely in a future release.
+    // `ref` 将在未来的版本中从元素中完全移除。
     element = {
-      // This tag allows us to uniquely identify this as a React Element
+      // 这个标签允许我们唯一标识这是一个 React 元素
       $$typeof: REACT_ELEMENT_TYPE,
 
-      // Built-in properties that belong on the element
+      // 元素的固有属性
       type,
       key,
 
       props,
 
-      // Record the component responsible for creating this element.
+      // 记录创建此元素的组件
       _owner: owner,
     };
     if (ref !== null) {
+      // 如果 `ref` 不为 `null`，则定义一个不可枚举的 `ref` 属性，并在访问时触发警告
       Object.defineProperty(element, 'ref', {
         enumerable: false,
         get: elementRefGetterWithDeprecationWarning,
       });
     } else {
-      // Don't warn on access if a ref is not given. This reduces false
-      // positives in cases where a test serializer uses
-      // getOwnPropertyDescriptors to compare objects, like Jest does, which is
-      // a problem because it bypasses non-enumerability.
-      //
-      // So unfortunately this will trigger a false positive warning in Jest
-      // when the diff is printed:
-      //
-      //   expect(<div ref={ref} />).toEqual(<span ref={ref} />);
-      //
-      // A bit sketchy, but this is what we've done for the `props.key` and
-      // `props.ref` accessors for years, which implies it will be good enough
-      // for `element.ref`, too. Let's see if anyone complains.
+      // 如果 `ref` 为 `null`，则直接定义一个不可枚举的 `ref` 属性，值为 `null`
       Object.defineProperty(element, 'ref', {
         enumerable: false,
         value: null,
       });
     }
-  } else {
-    // In prod, `ref` is a regular property and _owner doesn't exist.
+  } else { // 生产模式下的处理
+    // 在生产模式下，`ref` 是一个普通属性，且 `_owner` 不存在
     element = {
-      // This tag allows us to uniquely identify this as a React Element
+      // 这个标签允许我们唯一标识这是一个 React 元素
       $$typeof: REACT_ELEMENT_TYPE,
 
-      // Built-in properties that belong on the element
+      // 元素的固有属性
       type,
       key,
       ref,
@@ -289,37 +309,38 @@ function ReactElement(
     };
   }
 
-  if (__DEV__) {
-    // The validation flag is currently mutative. We put it on
-    // an external backing store so that we can freeze the whole object.
-    // This can be replaced with a WeakMap once they are implemented in
-    // commonly used development environments.
+  if (__DEV__) { // 开发模式下的额外处理
+    // 验证标志目前是可变的。我们将其放在外部存储中，以便可以冻结整个对象。
+    // 一旦 WeakMap 在常用开发环境中实现，这可以被替换为 WeakMap。
     element._store = {};
 
-    // To make comparing ReactElements easier for testing purposes, we make
-    // the validation flag non-enumerable (where possible, which should
-    // include every environment we run tests in), so the test framework
-    // ignores it.
+    // 为了使测试中的 React 元素比较更容易，我们将验证标志设置为不可枚举（在可能的情况下），
+    // 这样测试框架会忽略它。
     Object.defineProperty(element._store, 'validated', {
       configurable: false,
       enumerable: false,
       writable: true,
       value: 0,
     });
-    // debugInfo contains Server Component debug information.
+
+    // `_debugInfo` 包含服务器组件的调试信息
     Object.defineProperty(element, '_debugInfo', {
       configurable: false,
       enumerable: false,
       writable: true,
       value: null,
     });
-    if (enableOwnerStacks) {
+
+    if (enableOwnerStacks) { // 如果启用了组件堆栈跟踪
+      // 添加调试堆栈信息
       Object.defineProperty(element, '_debugStack', {
         configurable: false,
         enumerable: false,
         writable: true,
         value: debugStack,
       });
+
+      // 添加调试任务信息
       Object.defineProperty(element, '_debugTask', {
         configurable: false,
         enumerable: false,
@@ -327,13 +348,15 @@ function ReactElement(
         value: debugTask,
       });
     }
+
+    // 如果环境支持 `Object.freeze`，则冻结 `props` 和 `element`，防止意外修改
     if (Object.freeze) {
       Object.freeze(element.props);
       Object.freeze(element);
     }
   }
 
-  return element;
+  return element; // 返回创建的 React 元素
 }
 
 /**
