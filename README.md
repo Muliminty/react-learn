@@ -23,7 +23,7 @@
 
 **学习成果**
 
-+[mini-react](https://github.com/Muliminty/demo/blob/main/single-file/mini-react.html)
++ [mini-react](https://github.com/Muliminty/demo/blob/main/single-file/mini-react.html)
 
 ---
 
